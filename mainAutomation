@@ -16,17 +16,24 @@ import RPi.GPIO as GPIO
 from adafruit_pca9685 import PCA9685
 
 # ----------------------------
+# I2C Configuration for PCA9685
+# ----------------------------
+# Define the I2C pins for the PCA9685 board.
+I2C_SCL = board.SCL   # Typically, the SCL pin on the Raspberry Pi (GPIO3)
+I2C_SDA = board.SDA   # Typically, the SDA pin on the Raspberry Pi (GPIO2)
+PCA9685_ADDRESS = 0x40  # Default I2C address for PCA9685; update if yours is different
+
+# ----------------------------
 # Servo (PCA9685) Configuration
 # ----------------------------
-
 SERVO_FREQUENCY = 50             # Hz (typical for servos; 20ms period)
-SERVO_NEUTRAL_PULSE = 1.5        # milliseconds for neutral (stop)
-SERVO_SLOW_PULSE = 1.6           # milliseconds for slow rotation (adjust as needed)
-SERVO_CHANNELS = [0, 1, 2, 3]    # PCA9685 channels to which servos are connected
+SERVO_NEUTRAL_PULSE = 1.5        # ms pulse width for neutral (stop)
+SERVO_SLOW_PULSE = 1.6           # ms pulse width for slow rotation (adjust as needed)
+SERVO_CHANNELS = [0, 1, 2, 3]    # PCA9685 channels connected to the servos
 
 def pulse_ms_to_duty_cycle(pulse_ms, frequency):
     """
-    Convert a pulse length in milliseconds to a 16-bit duty cycle value
+    Convert a pulse width in milliseconds to a 16-bit duty cycle value
     for the PCA9685.
     """
     period_ms = 1000.0 / frequency
@@ -40,7 +47,6 @@ SERVO_SLOW_DUTY    = pulse_ms_to_duty_cycle(SERVO_SLOW_PULSE, SERVO_FREQUENCY)
 # ----------------------------
 # Relay (LED) Configuration
 # ----------------------------
-
 # BCM GPIO pins connected to the relay board (adjust as needed)
 RELAY_PINS = [5, 6, 13, 19, 26, 21, 20]
 
@@ -58,18 +64,15 @@ def cleanup_gpio():
 # ----------------------------
 # LED (Relay) Pattern Functions
 # ----------------------------
-
 def led_pattern_all(duration=10, interval=1):
     """
     Pattern 1: Turn all relays ON, wait, then OFF.
     """
     end_time = time.time() + duration
     while time.time() < end_time:
-        # All ON
         for pin in RELAY_PINS:
             GPIO.output(pin, GPIO.HIGH)
         time.sleep(interval)
-        # All OFF
         for pin in RELAY_PINS:
             GPIO.output(pin, GPIO.LOW)
         time.sleep(interval)
@@ -80,11 +83,9 @@ def led_pattern_sequential(duration=10, interval=0.5):
     """
     end_time = time.time() + duration
     while time.time() < end_time:
-        # Turn each relay ON one by one
         for pin in RELAY_PINS:
             GPIO.output(pin, GPIO.HIGH)
             time.sleep(interval)
-        # Then turn them OFF one by one
         for pin in RELAY_PINS:
             GPIO.output(pin, GPIO.LOW)
             time.sleep(interval)
@@ -95,11 +96,9 @@ def led_pattern_alternate(duration=10, interval=0.5):
     """
     end_time = time.time() + duration
     while time.time() < end_time:
-        # Even-indexed relays ON, odd OFF
         for idx, pin in enumerate(RELAY_PINS):
             GPIO.output(pin, GPIO.HIGH if idx % 2 == 0 else GPIO.LOW)
         time.sleep(interval)
-        # Reverse: odd-indexed relays ON, even OFF
         for idx, pin in enumerate(RELAY_PINS):
             GPIO.output(pin, GPIO.HIGH if idx % 2 == 1 else GPIO.LOW)
         time.sleep(interval)
@@ -107,15 +106,14 @@ def led_pattern_alternate(duration=10, interval=0.5):
 # ----------------------------
 # Main Loop
 # ----------------------------
-
 def main():
-    # Initialize I2C bus and PCA9685
-    i2c = busio.I2C(board.SCL, board.SDA)
-    pca = PCA9685(i2c)
+    # Initialize I2C bus using specified I2C pins for the PCA9685 board
+    i2c = busio.I2C(I2C_SCL, I2C_SDA)
+    pca = PCA9685(i2c, address=PCA9685_ADDRESS)
     pca.frequency = SERVO_FREQUENCY
-    print(f"PCA9685 initialized with frequency {pca.frequency}Hz")
-    
-    # Initialize GPIO for relays
+    print(f"PCA9685 initialized with frequency {pca.frequency}Hz at address {PCA9685_ADDRESS:#04x}")
+
+    # Initialize GPIO for relay control
     setup_gpio()
 
     try:
@@ -124,7 +122,7 @@ def main():
             pca.channels[channel].duty_cycle = SERVO_SLOW_DUTY
         print("Servos set to slow rotation.")
 
-        # Infinite loop for LED patterns
+        # Infinite loop cycling through LED patterns
         while True:
             print("Running LED pattern: All ON/OFF")
             led_pattern_all(duration=10, interval=1)
@@ -132,7 +130,6 @@ def main():
             led_pattern_sequential(duration=10, interval=0.5)
             print("Running LED pattern: Alternate")
             led_pattern_alternate(duration=10, interval=0.5)
-            # Optionally, add a pause between cycles:
             time.sleep(1)
     
     except KeyboardInterrupt:
@@ -142,7 +139,7 @@ def main():
         print("Unexpected error:", e)
     
     finally:
-        # Optionally, set servos to neutral (stop) before exiting
+        # Set servos to neutral (stop) before exiting
         for channel in SERVO_CHANNELS:
             pca.channels[channel].duty_cycle = SERVO_NEUTRAL_DUTY
         cleanup_gpio()
